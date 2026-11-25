@@ -1,0 +1,7 @@
+services:
+  jarvis-api:
+    build: ./backend
+    ports:
+      - "5050:5050"
+    env_file: .env
+    restart: unless-stopped
