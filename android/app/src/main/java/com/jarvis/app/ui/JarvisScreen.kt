@@ -23,8 +23,8 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -37,6 +37,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -58,11 +61,19 @@ private val BubbleAssistant = Color(0xFF1A2E38)
 fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
     val state by viewModel.state.collectAsState()
     val context = LocalContext.current
+    var micPermissionGranted by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.RECORD_AUDIO,
+            ) == PackageManager.PERMISSION_GRANTED,
+        )
+    }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) { granted ->
-        if (granted) viewModel.startListening()
+        micPermissionGranted = granted
     }
 
     LaunchedEffect(Unit) {
@@ -112,11 +123,7 @@ fun JarvisApp(viewModel: JarvisViewModel = viewModel()) {
                 MicButton(
                     status = state.status,
                     onPress = {
-                        val granted = ContextCompat.checkSelfPermission(
-                            context,
-                            Manifest.permission.RECORD_AUDIO,
-                        ) == PackageManager.PERMISSION_GRANTED
-                        if (granted) {
+                        if (micPermissionGranted) {
                             viewModel.startListening()
                         } else {
                             permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
@@ -237,7 +244,7 @@ private fun MessageList(
             }
         }
         items(messages) { message ->
-            val isUser = message.role == "user"
+            val isUser = message.role == MessageRole.User
             Box(
                 modifier = Modifier.fillMaxWidth(),
                 contentAlignment = if (isUser) Alignment.CenterEnd else Alignment.CenterStart,
@@ -321,7 +328,7 @@ private fun TextInputRow(
         )
         IconButton(onClick = onSend, enabled = enabled && draft.isNotBlank()) {
             Icon(
-                imageVector = Icons.Filled.Send,
+                imageVector = Icons.AutoMirrored.Filled.Send,
                 contentDescription = "Отправить",
                 tint = JarvisAccent,
             )

@@ -24,8 +24,13 @@ enum class JarvisStatus {
     Error,
 }
 
+enum class MessageRole {
+    User,
+    Assistant,
+}
+
 data class ChatMessage(
-    val role: String,
+    val role: MessageRole,
     val text: String,
 )
 
@@ -41,8 +46,7 @@ data class JarvisUiState(
 
 class JarvisViewModel(application: Application) : AndroidViewModel(application) {
     private val settings = SettingsStore(application)
-    private var baseUrlCache = SettingsStore.DEFAULT_BASE_URL
-    private val api = JarvisApi(baseUrlProvider = { baseUrlCache })
+    private val api = JarvisApi(baseUrlProvider = { _state.value.baseUrl })
     private val recorder = WavRecorder()
     private val player = AudioPlayer()
 
@@ -52,7 +56,6 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
     init {
         viewModelScope.launch {
             settings.baseUrl.collect { url ->
-                baseUrlCache = url
                 _state.update { it.copy(baseUrl = url) }
             }
         }
@@ -64,7 +67,9 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
 
     fun saveBaseUrl() {
         viewModelScope.launch {
-            settings.setBaseUrl(_state.value.baseUrl)
+            val normalized = _state.value.baseUrl.trim().trimEnd('/')
+            _state.update { it.copy(baseUrl = normalized) }
+            settings.setBaseUrl(normalized)
             checkHealth()
         }
     }
@@ -106,16 +111,9 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         try {
             player.stop()
             recorder.start()
-            _state.update {
-                it.copy(status = JarvisStatus.Listening, statusDetail = "Слушаю…")
-            }
+            setStatus(JarvisStatus.Listening, "Слушаю…")
         } catch (e: Exception) {
-            _state.update {
-                it.copy(
-                    status = JarvisStatus.Error,
-                    statusDetail = e.message ?: "Не удалось начать запись",
-                )
-            }
+            setStatus(JarvisStatus.Error, e.message ?: "Не удалось начать запись")
         }
     }
 
@@ -126,30 +124,22 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
             val wav = File(cacheDir, "utterance.wav")
             try {
                 recorder.stop(wav)
-                _state.update {
-                    it.copy(status = JarvisStatus.Thinking, statusDetail = "Думаю…")
-                }
+                setStatus(JarvisStatus.Thinking, "Думаю…")
                 val response = api.voice(wav, _state.value.sessionId)
                 _state.update {
                     it.copy(
-                        sessionId = response.session_id,
+                        sessionId = response.sessionId,
                         messages = it.messages + listOf(
-                            ChatMessage("user", response.transcript),
-                            ChatMessage("assistant", response.reply),
+                            ChatMessage(MessageRole.User, response.transcript),
+                            ChatMessage(MessageRole.Assistant, response.reply),
                         ),
                         status = JarvisStatus.Speaking,
                         statusDetail = "Говорю…",
                     )
                 }
-                playBase64Audio(response.audio_base64)
+                playBase64Audio(response.audioBase64, response.audioMime)
             } catch (e: Exception) {
-                val detail = when (e) {
-                    is ApiException -> e.body.ifBlank { e.message.orEmpty() }
-                    else -> e.message ?: "Ошибка голоса"
-                }
-                _state.update {
-                    it.copy(status = JarvisStatus.Error, statusDetail = detail)
-                }
+                setStatus(JarvisStatus.Error, errorDetail(e, "Ошибка голоса"))
             } finally {
                 wav.delete()
             }
@@ -165,34 +155,33 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                     draft = "",
                     status = JarvisStatus.Thinking,
                     statusDetail = "Думаю…",
-                    messages = it.messages + ChatMessage("user", text),
+                    messages = it.messages + ChatMessage(MessageRole.User, text),
                 )
             }
             try {
                 val response = api.chat(text, _state.value.sessionId)
                 _state.update {
                     it.copy(
-                        sessionId = response.session_id,
-                        messages = it.messages + ChatMessage("assistant", response.reply),
+                        sessionId = response.sessionId,
+                        messages = it.messages + ChatMessage(MessageRole.Assistant, response.reply),
                         status = JarvisStatus.Idle,
                         statusDetail = "Готов",
                     )
                 }
             } catch (e: Exception) {
-                val detail = when (e) {
-                    is ApiException -> e.body.ifBlank { e.message.orEmpty() }
-                    else -> e.message ?: "Ошибка чата"
-                }
-                _state.update {
-                    it.copy(status = JarvisStatus.Error, statusDetail = detail)
-                }
+                setStatus(JarvisStatus.Error, errorDetail(e, "Ошибка чата"))
             }
         }
     }
 
-    private fun playBase64Audio(audioBase64: String) {
+    private fun playBase64Audio(audioBase64: String, audioMime: String) {
         val bytes = Base64.decode(audioBase64, Base64.DEFAULT)
-        val file = File(getApplication<Application>().cacheDir, "reply.mp3")
+        val extension = when {
+            audioMime.contains("wav") -> "wav"
+            audioMime.contains("ogg") -> "ogg"
+            else -> "mp3"
+        }
+        val file = File(getApplication<Application>().cacheDir, "reply.$extension")
         file.writeBytes(bytes)
         player.playFile(file) {
             _state.update {
@@ -204,6 +193,16 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
             }
         }
     }
+
+    private fun setStatus(status: JarvisStatus, detail: String) {
+        _state.update { it.copy(status = status, statusDetail = detail) }
+    }
+
+    private fun errorDetail(e: Exception, fallback: String): String =
+        when (e) {
+            is ApiException -> e.body.ifBlank { e.message.orEmpty() }.ifBlank { fallback }
+            else -> e.message ?: fallback
+        }
 
     override fun onCleared() {
         recorder.cancel()

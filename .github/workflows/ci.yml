@@ -40,6 +40,9 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           build-root-directory: android
+      - uses: android-actions/setup-android@v4
+      - name: Install Android SDK platform 37.2
+        run: sdkmanager "platforms;android-37.2"
       - name: Assemble debug APK
         run: |
           chmod +x gradlew

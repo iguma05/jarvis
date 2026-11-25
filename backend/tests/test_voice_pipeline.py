@@ -15,19 +15,19 @@ class FakeCompleter:
 def test_voice_pipeline(monkeypatch) -> None:
     store = SessionStore()
 
-    monkeypatch.setattr(
-        "app.api.voice.transcribe_audio",
-        lambda audio_bytes, filename="audio.wav": "what time is it",
-    )
-    monkeypatch.setattr(
-        "app.api.voice.chat_turn",
-        lambda message, session_id=None: llm_module.chat_turn(
+    def fake_chat_turn(message, session_id=None, **kwargs):
+        return llm_module.chat_turn(
             message,
             session_id,
             store=store,
             completer=FakeCompleter(),
-        ),
+        )
+
+    monkeypatch.setattr(
+        "app.api.voice.transcribe_audio",
+        lambda audio_bytes, filename="audio.wav": "what time is it",
     )
+    monkeypatch.setattr("app.api.voice.chat_turn", fake_chat_turn)
     monkeypatch.setattr(
         "app.api.voice.synthesize_speech",
         lambda text: (base64.b64encode(b"fake-mp3").decode("ascii"), "audio/mpeg"),
