@@ -14,11 +14,9 @@ class SessionStore:
 
     def ensure(self, session_id: str | None) -> str:
         with self._lock:
-            if session_id and session_id in self._sessions:
-                return session_id
-            new_id = session_id or str(uuid.uuid4())
-            self._sessions.setdefault(new_id, [])
-            return new_id
+            session_id = session_id or str(uuid.uuid4())
+            self._sessions.setdefault(session_id, [])
+            return session_id
 
     def get_messages(self, session_id: str) -> list[dict[str, Any]]:
         with self._lock:

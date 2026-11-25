@@ -20,13 +20,8 @@ class JarvisApi(
 
     suspend fun health(): HealthResponse = withContext(Dispatchers.IO) {
         val request = Request.Builder().url("${root()}/health").get().build()
-        client.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) {
-                throw ApiException(response.code, response.body?.string().orEmpty())
-            }
-            val json = JSONObject(response.body!!.string())
-            HealthResponse(status = json.getString("status"))
-        }
+        val json = executeJson(request)
+        HealthResponse(status = json.getString("status"))
     }
 
     suspend fun chat(message: String, sessionId: String?): ChatResponse =
@@ -36,22 +31,15 @@ class JarvisApi(
                 .apply {
                     if (!sessionId.isNullOrBlank()) put("session_id", sessionId)
                 }
-            val body = payload.toString().toRequestBody(JSON)
             val request = Request.Builder()
                 .url("${root()}/v1/chat")
-                .post(body)
+                .post(payload.toString().toRequestBody(JSON))
                 .build()
-            client.newCall(request).execute().use { response ->
-                val text = response.body?.string().orEmpty()
-                if (!response.isSuccessful) {
-                    throw ApiException(response.code, text)
-                }
-                val json = JSONObject(text)
-                ChatResponse(
-                    session_id = json.getString("session_id"),
-                    reply = json.getString("reply"),
-                )
-            }
+            val json = executeJson(request)
+            ChatResponse(
+                sessionId = json.getString("session_id"),
+                reply = json.getString("reply"),
+            )
         }
 
     suspend fun voice(audioFile: File, sessionId: String?): VoiceResponse =
@@ -73,21 +61,25 @@ class JarvisApi(
                 .url("${root()}/v1/voice")
                 .post(multipart)
                 .build()
-            client.newCall(request).execute().use { response ->
-                val text = response.body?.string().orEmpty()
-                if (!response.isSuccessful) {
-                    throw ApiException(response.code, text)
-                }
-                val json = JSONObject(text)
-                VoiceResponse(
-                    session_id = json.getString("session_id"),
-                    transcript = json.getString("transcript"),
-                    reply = json.getString("reply"),
-                    audio_base64 = json.getString("audio_base64"),
-                    audio_mime = json.optString("audio_mime", "audio/mpeg"),
-                )
-            }
+            val json = executeJson(request)
+            VoiceResponse(
+                sessionId = json.getString("session_id"),
+                transcript = json.getString("transcript"),
+                reply = json.getString("reply"),
+                audioBase64 = json.getString("audio_base64"),
+                audioMime = json.optString("audio_mime", "audio/mpeg"),
+            )
         }
+
+    private fun executeJson(request: Request): JSONObject {
+        client.newCall(request).execute().use { response ->
+            val text = response.body.string()
+            if (!response.isSuccessful) {
+                throw ApiException(response.code, text)
+            }
+            return JSONObject(text)
+        }
+    }
 
     companion object {
         private val JSON = "application/json; charset=utf-8".toMediaType()

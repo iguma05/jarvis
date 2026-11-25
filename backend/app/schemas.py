@@ -17,7 +17,3 @@ class VoiceResponse(BaseModel):
     reply: str
     audio_base64: str
     audio_mime: str = "audio/mpeg"
-
-
-class HealthResponse(BaseModel):
-    status: str

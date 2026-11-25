@@ -28,5 +28,6 @@ def transcribe_audio(
     *,
     transcriber: Transcriber | None = None,
 ) -> str:
-    transcriber = transcriber or OpenAITranscriber()
+    if transcriber is None:
+        transcriber = OpenAITranscriber()
     return transcriber.transcribe(audio_bytes, filename)

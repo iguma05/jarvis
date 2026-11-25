@@ -63,17 +63,8 @@ class WavRecorder {
         if (!recording.getAndSet(false)) {
             throw IllegalStateException("Recorder was not running")
         }
-        worker?.join(2000)
-        worker = null
-
-        audioRecord?.run {
-            try {
-                stop()
-            } catch (_: IllegalStateException) {
-            }
-            release()
-        }
-        audioRecord = null
+        stopWorker(2000)
+        releaseRecorder()
 
         val pcm = synchronized(pcmBuffer) { pcmBuffer.toByteArray() }
         writeWav(outputFile, pcm, SAMPLE_RATE, 1, 16)
@@ -82,8 +73,17 @@ class WavRecorder {
 
     fun cancel() {
         if (!recording.getAndSet(false)) return
-        worker?.join(1000)
+        stopWorker(1000)
+        releaseRecorder()
+        pcmBuffer.reset()
+    }
+
+    private fun stopWorker(timeoutMs: Long) {
+        worker?.join(timeoutMs)
         worker = null
+    }
+
+    private fun releaseRecorder() {
         audioRecord?.run {
             try {
                 stop()
@@ -92,7 +92,6 @@ class WavRecorder {
             release()
         }
         audioRecord = null
-        pcmBuffer.reset()
     }
 
     companion object {

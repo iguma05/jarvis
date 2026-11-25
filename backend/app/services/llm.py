@@ -12,13 +12,11 @@ class ChatCompleter(Protocol):
 
 
 class OpenAIChatCompleter:
-    def __init__(self, settings: Settings | None = None) -> None:
-        self._settings = settings or get_settings()
-
     def complete(self, messages: list[dict[str, Any]]) -> str:
+        settings = get_settings()
         client = get_openai_client()
         response = client.chat.completions.create(
-            model=self._settings.openai_model,
+            model=settings.openai_model,
             messages=messages,
         )
         content = response.choices[0].message.content
@@ -33,9 +31,12 @@ def chat_turn(
     completer: ChatCompleter | None = None,
     settings: Settings | None = None,
 ) -> tuple[str, str]:
-    settings = settings or get_settings()
-    store = store or session_store
-    completer = completer or OpenAIChatCompleter(settings)
+    if settings is None:
+        settings = get_settings()
+    if store is None:
+        store = session_store
+    if completer is None:
+        completer = OpenAIChatCompleter()
 
     sid = store.ensure(session_id)
     store.append(sid, "user", message)
