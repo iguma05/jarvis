@@ -1,6 +1,6 @@
 # Джарвис v1
 
-Домашняя прослойка: **Docker (FastAPI)** + **Android (голос)**.  
+Домашняя прослойка: **Docker (FastAPI на Alpine)** + **Android (голос)**.  
 Микрофон → STT (Whisper) → LLM → TTS → ответ на телефон. Ключ OpenAI только на сервере.
 
 ## Что нужно
@@ -17,6 +17,8 @@ cp .env.example .env
 
 docker compose up --build
 ```
+
+Образ бэкенда: `python:3.14-alpine` ([`backend/Dockerfile`](backend/Dockerfile)).
 
 Проверка:
 
@@ -81,11 +83,21 @@ pytest -q
 uvicorn app.main:app --host 0.0.0.0 --port 5050
 ```
 
+## CI (GitHub Actions)
+
+После push / PR в `main` или `master` запускается [`.github/workflows/ci.yml`](.github/workflows/ci.yml):
+
+- **backend** — Python 3.14, `pytest`
+- **android** — JDK 21, `./gradlew :app:assembleDebug` (Gradle; Maven для Android не используется)
+
+Локально то же самое: `pytest` в `backend/`, сборка APK из `android/` в Android Studio или через `./gradlew :app:assembleDebug`.
+
 ## Структура
 
 ```
-backend/     FastAPI: /health, /v1/chat, /v1/voice
-android/     Kotlin + Compose, push-to-talk
+backend/     FastAPI на Alpine: /health, /v1/chat, /v1/voice (Python 3.14)
+android/     Kotlin + Compose + Gradle (AGP 9.5), push-to-talk
+.github/     GitHub Actions CI
 docker-compose.yml
 ```
 
